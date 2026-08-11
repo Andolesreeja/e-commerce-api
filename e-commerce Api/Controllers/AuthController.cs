@@ -1,8 +1,7 @@
-﻿using e_commerce_Api.Data;
-using e_commerce_Api.Models;
-using e_commerce_Api.Services;
+﻿using e_commerce_Api.Commands.Auth.Login;
+using e_commerce_Api.Commands.Auth.RegisterUser;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace e_commerce_Api.Controllers
 {
@@ -10,85 +9,51 @@ namespace e_commerce_Api.Controllers
     [Route("api/[controller]")]
     public class AuthController : ControllerBase
     {
-        private readonly JwtService _jwtService;
-        private readonly AppDbContext _context;
-        private readonly PasswordService _passwordService;
+        private readonly IMediator _mediator;
 
-        public AuthController(
-            JwtService jwtService,
-            AppDbContext context,
-            PasswordService passwordService)
+        public AuthController(IMediator mediator)
         {
-            _jwtService = jwtService;
-            _context = context;
-            _passwordService = passwordService;
+            _mediator = mediator;
         }
 
+        // POST: api/Auth/register
         [HttpPost("register")]
-        public async Task<IActionResult> Register(LoginRequest request)
+        public async Task<IActionResult> Register(
+            RegisterUserCommand command)
         {
-            var existingUser = await _context.Users
-                .FirstOrDefaultAsync(u => u.Username == request.Username);
+            try
+            {
+                var result = await _mediator.Send(command);
 
-            if (existingUser != null)
+                return Ok(result);
+            }
+            catch (Exception ex)
             {
                 return BadRequest(new
                 {
-                    message = "Username already exists"
+                    message = ex.Message
                 });
             }
-
-            var user = new User
-            {
-                Username = request.Username,
-                PasswordHash = _passwordService.HashPassword(request.Password)
-            };
-
-            _context.Users.Add(user);
-
-            await _context.SaveChangesAsync();
-
-            return Ok(new
-            {
-                message = "User registered successfully",
-                username = user.Username
-            });
         }
 
+        // POST: api/Auth/login
         [HttpPost("login")]
-        public async Task<IActionResult> Login(LoginRequest request)
+        public async Task<IActionResult> Login(
+            LoginCommand command)
         {
-            var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.Username == request.Username);
+            try
+            {
+                var result = await _mediator.Send(command);
 
-            if (user == null)
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
             {
                 return Unauthorized(new
                 {
-                    message = "Invalid username or password"
+                    message = ex.Message
                 });
             }
-
-            var passwordValid = _passwordService.VerifyPassword(
-                request.Password,
-                user.PasswordHash
-            );
-
-            if (!passwordValid)
-            {
-                return Unauthorized(new
-                {
-                    message = "Invalid username or password"
-                });
-            }
-
-            var token = await _jwtService.GenerateToken(user.Username);
-
-            return Ok(new
-            {
-                token = token,
-                expiresIn = "1 hour"
-            });
         }
     }
 }
